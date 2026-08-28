@@ -1,0 +1,127 @@
+section .data
+    matrixA db  1, 2, 3, 4
+            db  5, 6, 7, 8
+            db  9, 1, 2, 3
+            db  4, 5, 6, 7
+
+    matrixB db  1, 0, 0, 0
+            db  0, 1, 0, 0
+            db  0, 0, 1, 0
+            db  0, 0, 0, 1
+
+    space   db ' '
+    newline db 10
+
+section .bss
+    matrixC resb 16
+    char_buf resb 1
+
+section .text
+    global _start
+
+_start:
+    ; --- Matrix Multiplication ---
+    mov ebx, 0              ; i (Row = 0..3)
+
+outer_loop:
+    cmp ebx, 4
+    jge print_result
+
+    mov edi, 0              ; j (Col = 0..3)
+
+middle_loop:
+    cmp edi, 4
+    jge next_row
+
+    mov esi, 0              ; k (Inner = 0..3)
+    xor edx, edx            ; Sum accumulator
+
+inner_loop:
+    cmp esi, 4
+    jge store_result
+
+    ; Get A[i][k] -> index = i * 4 + k
+    mov eax, ebx
+    shl eax, 2
+    add eax, esi
+    movzx ecx, byte [matrixA + eax]  ; Load A value into ECX
+
+    ; Get B[k][j] -> index = k * 4 + j
+    mov eax, esi
+    shl eax, 2
+    add eax, edi
+    movzx eax, byte [matrixB + eax]  ; Load B value into EAX
+
+    ; Multiply A[i][k] * B[k][j]
+    imul eax, ecx
+    add edx, eax            ; Add to Sum
+
+    inc esi
+    jmp inner_loop
+
+store_result:
+    ; Store in Matrix C -> index = i * 4 + j
+    mov eax, ebx
+    shl eax, 2
+    add eax, edi
+    mov [matrixC + eax], dl
+
+    inc edi
+    jmp middle_loop
+
+next_row:
+    inc ebx
+    jmp outer_loop
+
+; --- Print Result Matrix ---
+print_result:
+    mov esi, 0              ; Index 0..15
+
+print_loop:
+    cmp esi, 16
+    jge done
+
+    ; Convert number to ASCII and print
+    mov al, [matrixC + esi]
+    add al, '0'
+    mov [char_buf], al
+
+    ; Print Character (Linux syscall)
+    mov eax, 4              ; sys_write
+    mov ebx, 1              ; stdout
+    mov ecx, char_buf
+    mov edx, 1
+    int 0x80
+
+    ; Print Space
+    mov eax, 4
+    mov ebx, 1
+    mov ecx, space
+    mov edx, 1
+    int 0x80
+
+    ; Check if newline needed (every 4 elements)
+    mov eax, esi
+    inc eax
+    xor edx, edx
+    mov ebx, 4
+    div ebx
+    cmp edx, 0
+    jne back_to_print
+
+    ; Print Newline
+    mov eax, 4
+    mov ebx, 1
+    mov ecx, newline
+    mov edx, 1
+    int 0x80
+
+back_to_print:
+    inc esi
+    jmp print_loop
+
+done:
+    ; Exit program (sys_exit)
+    mov eax, 1
+    xor ebx, ebx
+    int 0x80
